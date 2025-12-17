@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
 import random
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
 
 @dataclass(frozen=True)
 class BankMovement:
@@ -12,13 +13,14 @@ class BankMovement:
     amount: Decimal  # positive for incoming, negative for outgoing
     currency: str
 
+
 def get_bank_feed(currency: str, days: int = 14) -> list[BankMovement]:
     """Mock bank feed generator.
 
     In a real system this would call an external provider (bank APIs, aggregators, etc.).
     We generate deterministic-ish data for demos.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     random.seed(currency + str(days))
     out: list[BankMovement] = []
     for i in range(15):

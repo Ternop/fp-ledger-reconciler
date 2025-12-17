@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -14,6 +14,7 @@ from app.schemas import ReconciliationSummary
 from app.services.connectors.mock_bank import get_bank_feed
 
 LOG = get_logger("reconciliation")
+
 
 def run_reconciliation() -> ReconciliationSummary:
     """Compare internal cash movements to a bank feed.
@@ -35,7 +36,8 @@ def run_reconciliation() -> ReconciliationSummary:
                     .options(joinedload(Transaction.postings).joinedload(Posting.account))
                     .where(Transaction.asset == "USD")
                 )
-                .unique().all()
+                .unique()
+                .all()
             )
 
             internal_amounts: list[float] = []
@@ -68,12 +70,12 @@ def run_reconciliation() -> ReconciliationSummary:
                 m = min(cnt, bm.get(amt, 0))
                 matched += m
                 if cnt > m:
-                    missing_in_bank += (cnt - m)
+                    missing_in_bank += cnt - m
 
             for amt, cnt in bm.items():
                 m = min(cnt, im.get(amt, 0))
                 if cnt > m:
-                    missing_in_ledger += (cnt - m)
+                    missing_in_ledger += cnt - m
 
             summary = ReconciliationSummary(
                 matched=matched,
@@ -87,14 +89,14 @@ def run_reconciliation() -> ReconciliationSummary:
             )
 
             run.status = "SUCCEEDED"
-            run.finished_at = datetime.now(timezone.utc)
+            run.finished_at = datetime.now(UTC)
             run.summary_json = json.dumps(summary.model_dump())
             s.add(run)
             return summary
         except Exception as e:
             LOG.error(f"reconciliation failed: {e}", exc_info=True)
             run.status = "FAILED"
-            run.finished_at = datetime.now(timezone.utc)
+            run.finished_at = datetime.now(UTC)
             run.summary_json = json.dumps({"error": str(e)})
             s.add(run)
             raise

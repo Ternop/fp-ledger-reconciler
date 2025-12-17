@@ -26,10 +26,10 @@ def _init_db_for_tests():
     engine = _import_engine()
 
     from app.models import Base
+
     Base.metadata.create_all(bind=engine)
 
     yield
 
     if DB_PATH.exists():
         DB_PATH.unlink()
-

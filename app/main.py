@@ -14,14 +14,17 @@ LOG = get_logger("fp-ledger")
 REQ_COUNT = Counter("http_requests_total", "Total HTTP requests", ["method", "path", "status"])
 REQ_LAT = Histogram("http_request_latency_seconds", "Latency", ["method", "path"])
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     LOG.info("starting")
     yield
     LOG.info("stopping")
 
+
 app = FastAPI(title="FP Ledger Reconciler", version="0.1.0", lifespan=lifespan)
 app.include_router(router)
+
 
 @app.middleware("http")
 async def metrics_mw(request: Request, call_next):
@@ -38,9 +41,11 @@ async def metrics_mw(request: Request, call_next):
         REQ_COUNT.labels(method=method, path=path, status=str(status)).inc()
         REQ_LAT.labels(method=method, path=path).observe(dur)
 
+
 @app.get("/health")
 def health():
     return {"ok": True}
+
 
 @app.get("/metrics")
 def metrics():

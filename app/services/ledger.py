@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -14,8 +14,10 @@ from app.schemas import AccountCreate, AccountOut, PostingOut, TransactionIn, Tr
 
 LOG = get_logger("ledger")
 
+
 def _as_iso(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).isoformat()
+    return dt.astimezone(UTC).isoformat()
+
 
 def create_account(payload: AccountCreate) -> AccountOut:
     with db_session() as s:
@@ -27,23 +29,31 @@ def create_account(payload: AccountCreate) -> AccountOut:
         s.flush()
         return AccountOut(id=acc.id, name=acc.name, asset=acc.asset, type=acc.type)
 
+
 def list_accounts() -> list[AccountOut]:
     with db_session() as s:
         rows = s.scalars(select(Account).order_by(Account.id)).all()
         return [AccountOut(id=a.id, name=a.name, asset=a.asset, type=a.type) for a in rows]
 
+
 def create_transaction(payload: TransactionIn, idempotency_key: str) -> TransactionOut:
     # Validate balanced double-entry
     total_debits = sum((p.amount for p in payload.postings if p.direction == "DEBIT"), Decimal("0"))
-    total_credits = sum((p.amount for p in payload.postings if p.direction == "CREDIT"), Decimal("0"))
+    total_credits = sum(
+        (p.amount for p in payload.postings if p.direction == "CREDIT"), Decimal("0")
+    )
     if total_debits != total_credits:
         raise ValueError(f"Transaction not balanced: debits={total_debits} credits={total_credits}")
 
     with db_session() as s:
-        existing = s.scalar(select(Transaction).where(Transaction.idempotency_key == idempotency_key))
+        existing = s.scalar(
+            select(Transaction).where(Transaction.idempotency_key == idempotency_key)
+        )
         if existing:
             existing = s.scalar(
-                select(Transaction).options(joinedload(Transaction.postings).joinedload(Posting.account)).where(Transaction.id == existing.id)
+                select(Transaction)
+                .options(joinedload(Transaction.postings).joinedload(Posting.account))
+                .where(Transaction.id == existing.id)
             )
             assert existing
             return _tx_out(existing)
@@ -63,28 +73,36 @@ def create_transaction(payload: TransactionIn, idempotency_key: str) -> Transact
             if not acct:
                 raise ValueError(f"Unknown account: {p.account_name}")
             if acct.asset != payload.asset:
-                raise ValueError(f"Asset mismatch for {acct.name}: account={acct.asset} tx={payload.asset}")
+                raise ValueError(
+                    f"Asset mismatch for {acct.name}: account={acct.asset} tx={payload.asset}"
+                )
             tx.postings.append(Posting(account_id=acct.id, direction=p.direction, amount=p.amount))
 
         # Outbox event (for downstream processing)
         s.add(
             EventOutbox(
                 event_type="transaction.created",
-                payload_json=json.dumps({"transaction_id": tx.id, "reference": tx.reference, "asset": tx.asset}),
+                payload_json=json.dumps(
+                    {"transaction_id": tx.id, "reference": tx.reference, "asset": tx.asset}
+                ),
             )
         )
         s.flush()
         s.refresh(tx)
 
         tx = s.scalar(
-            select(Transaction).options(joinedload(Transaction.postings).joinedload(Posting.account)).where(Transaction.id == tx.id)
+            select(Transaction)
+            .options(joinedload(Transaction.postings).joinedload(Posting.account))
+            .where(Transaction.id == tx.id)
         )
         assert tx
         return _tx_out(tx)
 
+
 def _tx_out(tx: Transaction) -> TransactionOut:
     postings = [
-        PostingOut(account_name=p.account.name, direction=p.direction, amount=p.amount) for p in tx.postings
+        PostingOut(account_name=p.account.name, direction=p.direction, amount=p.amount)
+        for p in tx.postings
     ]
     return TransactionOut(
         id=tx.id,
@@ -94,6 +112,7 @@ def _tx_out(tx: Transaction) -> TransactionOut:
         created_at=_as_iso(tx.created_at),
         postings=postings,
     )
+
 
 def list_transactions(limit: int = 50) -> list[TransactionOut]:
     limit = max(1, min(limit, 500))
@@ -105,6 +124,7 @@ def list_transactions(limit: int = 50) -> list[TransactionOut]:
                 .order_by(Transaction.id.desc())
                 .limit(limit)
             )
-            .unique().all()
+            .unique()
+            .all()
         )
         return [_tx_out(tx) for tx in txs]

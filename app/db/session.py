@@ -41,4 +41,3 @@ def db_session():
         raise
     finally:
         db.close()
-
