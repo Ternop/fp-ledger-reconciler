@@ -24,3 +24,4 @@ venv/
 
 # docker local
 *.log
+app.db
