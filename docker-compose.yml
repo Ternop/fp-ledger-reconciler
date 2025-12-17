@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      - FP_DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/fp
+      - PYTHONPATH=/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+  db:
+    image: postgres:16
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fp
+    ports:
+      - "5432:5432"
+    volumes:
+      - fp_db:/var/lib/postgresql/data
+
+volumes:
+  fp_db:
